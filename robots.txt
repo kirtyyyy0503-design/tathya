@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kirtyyyy0503-design.github.io/tathya/sitemap.xml

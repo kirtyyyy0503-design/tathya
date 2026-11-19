@@ -19,7 +19,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import quote, urljoin
+from urllib.parse import quote, urlencode, urljoin
 
 ROOT = Path(__file__).resolve().parent.parent
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -27,7 +27,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 SITE_URL = os.environ.get("SITE_URL", "https://kirtyyyy0503-design.github.io/tathya").rstrip("/")
 SITE_NAME = "तथ्य"
 TAGLINE = "देश और दुनिया की सटीक ख़बरें, बिना शोर के"
-UA = "Mozilla/5.0 (compatible; TathyaBot/1.0)"
+UA = "Mozilla/5.0 (compatible; TathyaBot/1.0; +https://github.com/kirtyyyy0503-design/tathya)"
 
 MAX_STORIES = 300        # stories kept on the site
 MAX_NEW_PER_RUN = 6      # Gemini calls per run (free tier friendly)
@@ -196,6 +196,42 @@ def download_image(url, key):
     return f"images/{name}"
 
 
+COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+
+
+def licence_ok(name):
+    n = (name or "").lower().strip()
+    if re.search(r"(^|[\s-])(nc|nd)([\s-]|$)", n):
+        return False
+    return n.startswith("cc by") or n.startswith("cc0") or "public domain" in n or n == "pd"
+
+
+def commons_image(query):
+    """Find a freely licensed photo on Wikimedia Commons. Returns dict or None."""
+    params = {
+        "action": "query", "format": "json", "generator": "search",
+        "gsrsearch": f"{query} filetype:bitmap", "gsrnamespace": "6", "gsrlimit": "10",
+        "prop": "imageinfo", "iiprop": "url|extmetadata|size|mime", "iiurlwidth": "900",
+    }
+    data = json.loads(http_get(COMMONS_API + "?" + urlencode(params)).decode("utf-8", "replace"))
+    pages = (data.get("query") or {}).get("pages") or {}
+    for pg in sorted(pages.values(), key=lambda x: x.get("index", 99)):
+        ii = (pg.get("imageinfo") or [{}])[0]
+        meta = ii.get("extmetadata") or {}
+        lic = (meta.get("LicenseShortName", {}).get("value") or "").strip()
+        if ii.get("mime") not in ("image/jpeg", "image/png"):
+            continue
+        if (ii.get("width") or 0) < 600 or not licence_ok(lic):
+            continue
+        url = ii.get("thumburl") or ii.get("url")
+        if not url:
+            continue
+        artist = strip_html(meta.get("Artist", {}).get("value", "")) or "अज्ञात"
+        return {"url": url, "page": ii.get("descriptionurl") or "https://commons.wikimedia.org",
+                "credit": f"{artist[:80]} / Wikimedia Commons ({lic})"}
+    return None
+
+
 def build_source_text(item):
     when = item["published"].astimezone(IST).strftime("%d-%m-%Y %H:%M IST") if item["published"] else "अज्ञात"
     if item["kind"] == "telegram":
@@ -257,7 +293,7 @@ def gemini_json(prompt):
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise SystemExit("GEMINI_API_KEY is not set")
-    model = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
+    model = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
@@ -494,7 +530,12 @@ def render_story(s, stories):
     fig = ""
     og_img = ""
     if s.get("image"):
-        fig = (f'<figure>{img_tag(s, "../")}<figcaption>फ़ोटो: {esc(s.get("image_credit", ""))}</figcaption></figure>')
+        if s.get("image_kind") == "file":
+            cap = (f'फ़ाइल फ़ोटो: <a href="{esc(s.get("image_credit_url", ""))}" rel="noopener nofollow" '
+                   f'target="_blank">{esc(s.get("image_credit", ""))}</a>')
+        else:
+            cap = f'फ़ोटो: {esc(s.get("image_credit", ""))}'
+        fig = f'<figure>{img_tag(s, "../")}<figcaption>{cap}</figcaption></figure>'
         og_img = (f'<meta property="og:image" content="{esc(SITE_URL + "/" + s["image"])}">'
                   f'<meta name="twitter:card" content="summary_large_image">')
     ld = json.dumps({
@@ -659,6 +700,22 @@ def main():
                             if path:
                                 story["image"] = path
                                 story["image_credit"] = item["source"]
+                    if not story.get("image"):
+                        q = data.get("image_query")
+                        q = q.strip() if isinstance(q, str) else ""
+                        if q:
+                            try:
+                                ci = commons_image(q)
+                            except Exception as e:
+                                log("   (commons search failed:", e, ")")
+                                ci = None
+                            if ci:
+                                path = download_image(ci["url"], "commons:" + ci["url"])
+                                if path:
+                                    story["image"] = path
+                                    story["image_kind"] = "file"
+                                    story["image_credit"] = ci["credit"]
+                                    story["image_credit_url"] = ci["page"]
                     stories.append(story)
                     added += 1
                     log("   added:", story["headline"])

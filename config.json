@@ -24,6 +24,11 @@
       "channel": "sansadtv",
       "name": "संसद टीवी",
       "show_images": true
+    },
+    {
+      "channel": "PIB_FactCheck",
+      "name": "PIB फ़ैक्ट चेक",
+      "show_images": true
     }
   ],
   "rss": [

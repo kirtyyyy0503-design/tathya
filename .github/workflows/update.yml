@@ -1,6 +1,4 @@
-
-on:
-  schedule:
+schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
 

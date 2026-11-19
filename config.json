@@ -1,0 +1,61 @@
+{
+  "telegram": [
+    {
+      "channel": "pibindia",
+      "name": "PIB India",
+      "show_images": true
+    },
+    {
+      "channel": "pibhindi",
+      "name": "PIB हिंदी",
+      "show_images": true
+    },
+    {
+      "channel": "airnewsalerts",
+      "name": "आकाशवाणी समाचार",
+      "show_images": true
+    },
+    {
+      "channel": "ddnewsofficial",
+      "name": "डीडी न्यूज़",
+      "show_images": true
+    },
+    {
+      "channel": "sansadtv",
+      "name": "संसद टीवी",
+      "show_images": true
+    }
+  ],
+  "rss": [
+    {
+      "name": "बीबीसी हिंदी",
+      "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
+      "show_images": false
+    },
+    {
+      "name": "डीडब्ल्यू हिंदी",
+      "url": "https://rss.dw.com/rdf/rss-hi-all",
+      "show_images": false
+    },
+    {
+      "name": "आज तक",
+      "url": "https://www.aajtak.in/rssfeeds/?id=home",
+      "show_images": false
+    },
+    {
+      "name": "एबीपी लाइव",
+      "url": "https://news.abplive.com/home/feed",
+      "show_images": false
+    },
+    {
+      "name": "एनडीटीवी इंडिया",
+      "url": "https://feeds.feedburner.com/ndtvkhabar-latest",
+      "show_images": false
+    },
+    {
+      "name": "दैनिक भास्कर",
+      "url": "https://www.bhaskar.com/rss-v1--category-1061.xml",
+      "show_images": false
+    }
+  ]
+}

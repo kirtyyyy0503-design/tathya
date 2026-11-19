@@ -64,3 +64,39 @@
     }
   ]
 }
+
+{
+  "telegram": [],
+  "rss": [
+    {
+      "name": "PIB Press Releases",
+      "url": "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1",
+      "show_images": false
+    },
+    {
+      "name": "RBI Press Releases",
+      "url": "https://rbi.org.in/pressreleases_rss.xml",
+      "show_images": false
+    },
+    {
+      "name": "BBC News World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "show_images": false
+    },
+    {
+      "name": "BBC News Business",
+      "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+      "show_images": false
+    },
+    {
+      "name": "BBC News Technology",
+      "url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+      "show_images": false
+    },
+    {
+      "name": "BBC Sport",
+      "url": "https://feeds.bbci.co.uk/sport/rss.xml",
+      "show_images": false
+    }
+  ]
+}

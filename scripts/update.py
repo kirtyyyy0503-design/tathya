@@ -34,6 +34,10 @@ MAX_NEW_PER_RUN = 6      # Gemini calls per run (free tier friendly)
 PER_SOURCE_LIMIT = 3     # newest items taken from each source per run
 MAX_AGE_HOURS = 24       # ignore items older than this
 GEMINI_PAUSE = 7         # seconds between Gemini calls
+GEMINI_TIMEOUT = 40      # seconds to wait for one Gemini answer
+MAX_FAILS = 3            # stop the run after this many slow/failed calls in a row
+RUN_BUDGET = 600         # stop starting new stories after this many seconds
+THINKING_ON = True       # ask Gemini for light thinking (auto-disabled if rejected)
 DEDUP_HOURS = 72
 MAX_IMG_BYTES = 1_500_000  # skip photos larger than this
 
@@ -54,7 +58,7 @@ def log(*a):
 
 # ----------------------------------------------------------------- fetching
 
-def http_get(url, timeout=25):
+def http_get(url, timeout=15):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "hi,en;q=0.8"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
@@ -245,7 +249,7 @@ def build_source_text(item):
                     body += "\n" + extra
             except Exception as e:
                 log("  (article text not fetched:", e, ")")
-    return f"स्रोत: {item['source']}\nप्रकाशित: {when}\n\n{body}"[:7000]
+    return f"स्रोत: {item['source']}\nप्रकाशित: {when}\n\n{body}"[:4000]
 
 
 def collect(cfg, seen):
@@ -289,34 +293,50 @@ class QuotaError(Exception):
     pass
 
 
+class GeminiSlow(Exception):
+    pass
+
+
 def gemini_json(prompt):
+    global THINKING_ON
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise SystemExit("GEMINI_API_KEY is not set")
     model = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    body = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.3, "responseMimeType": "application/json"},
-    }).encode()
-    last = None
-    for attempt in range(3):
+    attempt = timeouts = 0
+    while True:
+        gen = {"temperature": 0.3, "responseMimeType": "application/json"}
+        if THINKING_ON:
+            gen["thinkingConfig"] = {"thinkingLevel": "low"}
+        body = json.dumps({"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}).encode()
         req = urllib.request.Request(url, data=body, headers={
             "Content-Type": "application/json", "x-goog-api-key": key})
+        t = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=90) as r:
+            with urllib.request.urlopen(req, timeout=GEMINI_TIMEOUT) as r:
                 resp = json.loads(r.read().decode("utf-8"))
+            log(f"   (gemini answered in {time.time() - t:.0f}s)")
             break
         except urllib.error.HTTPError as e:
-            last = e
+            detail = e.read()[:300]
+            if e.code == 400 and THINKING_ON and b"thinking" in detail.lower():
+                THINKING_ON = False
+                log("   (model rejects thinking setting, retrying without it)")
+                continue
             if e.code in (429, 500, 503) and attempt < 2:
-                time.sleep(25 * (attempt + 1))
+                attempt += 1
+                time.sleep(20 * attempt)
                 continue
             if e.code == 429:
                 raise QuotaError("Gemini quota reached")
-            raise RuntimeError(f"Gemini HTTP {e.code}: {e.read()[:200]!r}")
-    else:
-        raise RuntimeError(f"Gemini failed: {last}")
+            raise RuntimeError(f"Gemini HTTP {e.code}: {detail!r}")
+        except OSError as e:  # timeouts and connection problems
+            timeouts += 1
+            if timeouts < 2:
+                log("   (gemini slow, trying once more)")
+                continue
+            raise GeminiSlow(str(e))
     try:
         text = resp["candidates"][0]["content"]["parts"][0]["text"]
     except Exception:
@@ -648,7 +668,7 @@ def sample_stories():
 
 
 def main():
-    global MAX_NEW_PER_RUN, PER_SOURCE_LIMIT, GEMINI_PAUSE, MAX_AGE_HOURS
+    global MAX_NEW_PER_RUN, PER_SOURCE_LIMIT, GEMINI_PAUSE, MAX_AGE_HOURS, GEMINI_TIMEOUT, MAX_FAILS, RUN_BUDGET
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
     args = ap.parse_args()
@@ -658,6 +678,9 @@ def main():
     PER_SOURCE_LIMIT = int(st.get("per_source_limit", PER_SOURCE_LIMIT))
     GEMINI_PAUSE = float(st.get("gemini_pause_seconds", GEMINI_PAUSE))
     MAX_AGE_HOURS = int(st.get("max_age_hours", MAX_AGE_HOURS))
+    GEMINI_TIMEOUT = int(st.get("gemini_timeout_seconds", GEMINI_TIMEOUT))
+    MAX_FAILS = int(st.get("max_consecutive_failures", MAX_FAILS))
+    RUN_BUDGET = int(st.get("run_budget_seconds", RUN_BUDGET))
     log(f"settings: max_new_per_run={MAX_NEW_PER_RUN}, per_source_limit={PER_SOURCE_LIMIT}, pause={GEMINI_PAUSE}s")
 
     if args.demo:
@@ -674,14 +697,18 @@ def main():
 
     candidates = collect(cfg, seen)
     log(f"{len(candidates)} candidate items")
-    calls, added = 0, 0
+    calls, added, fails, t0 = 0, 0, 0, time.time()
     for item in candidates:
         if calls >= MAX_NEW_PER_RUN:
+            break
+        if time.time() - t0 > RUN_BUDGET:
+            log("Time budget used up, stopping this run.")
             break
         log(f"-> {item['source']}: {item['url']}")
         try:
             calls += 1
             data = gemini_json(prompt_tpl.replace("{{SOURCE_TEXT}}", build_source_text(item)))
+            fails = 0
             if isinstance(data, dict) and data.get("skip"):
                 log("   skipped:", data.get("reason"))
                 seen_list.append(item["id"])
@@ -730,6 +757,12 @@ def main():
         except QuotaError:
             log("Gemini quota reached, stopping this run.")
             break
+        except GeminiSlow as e:
+            fails += 1
+            log(f"   gemini too slow ({fails}/{MAX_FAILS}), will retry next run:", e)
+            if fails >= MAX_FAILS:
+                log("Gemini keeps timing out, stopping this run early.")
+                break
         except ValueError as e:
             log("   bad output, marking as seen:", e)
             seen_list.append(item["id"])

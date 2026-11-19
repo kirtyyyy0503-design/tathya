@@ -37,6 +37,8 @@ Rewrite the raw source text below (English, Hinglish or rough Hindi) into origin
 - category: exactly one of `राष्ट्रीय`, `अंतरराष्ट्रीय`, `व्यापार`, `टेक`, `खेल`.
 - priority: integer 1 to 5. 5 = major national or international development (disaster, major policy, big election result, war). 3 = regular news. 1 = minor or low-impact. Do not inflate priority.
 
+- image_query: 2 to 5 English words naming the main PUBLIC subject of the story, which a free encyclopedia photo could show: a government building, institution, city landmark, spacecraft, stadium, company headquarters, or a public office-holder acting in an official role. Examples: "Parliament of India", "ISRO Sriharikota", "Reserve Bank of India building", "Wankhede Stadium". Return null for crime, terrorism, militants, accidents, deaths, court cases about individuals, private persons, minors, victims or suspects, and whenever a file photo could mislead or cause harm. When unsure, return null.
+
 ## 6. Noise filter
 If the source is an advertisement, promotion, job or loan spam, meme, greeting, channel announcement, a poll, or has no verifiable news value, return exactly:
 {"skip": true, "reason": "विज्ञापन | अफ़वाह | राय | बिना_तथ्य | अन्य"}
@@ -54,7 +56,8 @@ Return ONLY valid JSON. No markdown fences, no text before or after.
   "tags": ["...", "...", "..."],
   "seo_description": "...",
   "slug": "...",
-  "story_key": "..."
+  "story_key": "...",
+  "image_query": "Parliament of India"
 }
 
 ## Raw source input

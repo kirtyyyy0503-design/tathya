@@ -3,7 +3,10 @@
     "max_new_per_run": 10,
     "per_source_limit": 2,
     "gemini_pause_seconds": 4,
-    "max_age_hours": 24
+    "max_age_hours": 24,
+    "gemini_timeout_seconds": 40,
+    "max_consecutive_failures": 3,
+    "run_budget_seconds": 600
   },
   "telegram": [
     {
@@ -86,11 +89,6 @@
     {
       "name": "इंडिया टीवी",
       "url": "https://www.indiatvnews.com/rssnews/topstory.xml",
-      "show_images": false
-    },
-    {
-      "name": "नवभारत टाइम्स",
-      "url": "https://navbharattimes.indiatimes.com/rssfeedstopstories.cms",
       "show_images": false
     }
   ]

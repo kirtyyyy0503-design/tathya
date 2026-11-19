@@ -648,10 +648,17 @@ def sample_stories():
 
 
 def main():
+    global MAX_NEW_PER_RUN, PER_SOURCE_LIMIT, GEMINI_PAUSE, MAX_AGE_HOURS
     ap = argparse.ArgumentParser()
     ap.add_argument("--demo", action="store_true")
     args = ap.parse_args()
     cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+    st = cfg.get("settings", {})
+    MAX_NEW_PER_RUN = int(st.get("max_new_per_run", MAX_NEW_PER_RUN))
+    PER_SOURCE_LIMIT = int(st.get("per_source_limit", PER_SOURCE_LIMIT))
+    GEMINI_PAUSE = float(st.get("gemini_pause_seconds", GEMINI_PAUSE))
+    MAX_AGE_HOURS = int(st.get("max_age_hours", MAX_AGE_HOURS))
+    log(f"settings: max_new_per_run={MAX_NEW_PER_RUN}, per_source_limit={PER_SOURCE_LIMIT}, pause={GEMINI_PAUSE}s")
 
     if args.demo:
         build_site(sample_stories(), ROOT / "preview", cfg)
